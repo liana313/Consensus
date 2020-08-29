@@ -8,6 +8,8 @@ from twisted.internet import reactor, protocol
 
 from composable_paxos import ProposalID
 
+import config #TODO remove this import and make client port an arg that is stored locally as var
+
 
 class Messenger(protocol.DatagramProtocol):
 
@@ -101,4 +103,11 @@ class Messenger(protocol.DatagramProtocol):
         self._send(peer_uid, 'accepted', instance_number = instance_number,
                                          proposal_id     = proposal_id,
                                          proposal_value  = proposal_value)
+    def send_reply(self, new_val):
+        msg = '{0} {1} {2}'.format('reply', new_val, self.replicated_val.get_network_uid())
+        print('snd client:', msg)
+        text = bytes(msg, 'utf-8')
+        self.transport.write(text, config.client)
+
+    # TODO: add send_reply - when accepted is received by learner, send value to client, client will continually check for messages and ignore those with same seq/proposal num
 

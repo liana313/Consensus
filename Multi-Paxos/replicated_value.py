@@ -39,6 +39,9 @@ class BaseReplicatedValue (object):
                                    self.accepted_value)
 
 
+    def get_network_uid(self):
+        return self.network_uid
+    
     def set_messenger(self, messenger):
         self.messenger = messenger
 
@@ -197,5 +200,6 @@ class BaseReplicatedValue (object):
         
         if isinstance(m, Resolution):
             print("----Resolution!!!")
+            self.messenger.send_reply(self.accepted_value)
             self.advance_instance( self.instance_number + 1, proposal_value )
     

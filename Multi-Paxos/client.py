@@ -21,7 +21,21 @@ class ClientProtocol(protocol.DatagramProtocol):
     def startProtocol(self):
     	text = bytes('propose {0}'.format(self.new_value), 'utf-8')
     	self.transport.write(text, self.addr)
-    	reactor.stop()
+    	#reactor.stop()
+    def datagramReceived(self, packet0, from_addr):
+        packet = str(packet0, 'utf-8')
+        try:
+            message_type, data, server_uid = packet.split(' ', 2)
+
+            if message_type == 'reply':
+                print("consensus!!  value: ", data, ", server: ", server_uid)
+            else:
+                print("unkown message recieved")
+                sys.exit(1)
+        except Exception:
+            print('Error processing packet: ', packet)
+            import traceback
+            traceback.print_exc()
 
 
 if len(sys.argv) != 3 or not  sys.argv[1] in config.peers:
@@ -30,7 +44,7 @@ if len(sys.argv) != 3 or not  sys.argv[1] in config.peers:
 
     
 def main():
-    reactor.listenUDP(0,ClientProtocol(sys.argv[1], sys.argv[2]))
+    reactor.listenUDP(config.client[1],ClientProtocol(sys.argv[1], sys.argv[2]))
 
     
 reactor.callWhenRunning(main)
