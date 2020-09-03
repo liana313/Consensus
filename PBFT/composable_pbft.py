@@ -112,7 +112,7 @@ class Replica(MessageHandler):
     def __init__(self,i, R):
         self.i = i #id of self
         self.R = R # total number of replicas
-        self.f = (R - 1) // 2 #max number of faulty replicas
+        self.f = (R - 1) // 3 #max number of faulty replicas
         self.vali = None # v_0
         self.view_i = 0
         self.in_i = set() # in messages log

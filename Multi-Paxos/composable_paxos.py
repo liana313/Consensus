@@ -319,6 +319,22 @@ class Learner (MessageHandler):
         self.final_value       = None
         self.final_acceptors   = None   # Will be a set of acceptor UIDs once the final value is chosen
         self.final_proposal_id = None
+        self.ledger = []
+        self.accounts = dict()
+        # TODO: instead of hardcoding, loop over peers by importing config
+        self.accounts['1000'] = 1000
+        self.accounts['1001'] = 1000
+        self.accounts['1002'] = 1000
+        self.accounts['2000'] = 1000
+        self.accounts['2001'] = 1000
+        self.accounts['2002'] = 1000
+        self.accounts['3000'] = 1000
+        self.accounts['3001'] = 1000
+        self.accounts['3002'] = 1000
+        self.accounts['4000'] = 1000
+        self.accounts['4001'] = 1000
+        self.accounts['4002'] = 1000
+        self.transactions = []
 
         
     def receive_accepted(self, msg):
@@ -366,6 +382,33 @@ class Learner (MessageHandler):
             self.acceptors         = None
 
             return Resolution( self.network_uid, self.final_value )
+            # call update ledger
+
+    # transaction must be in form "snder-receiver-val", where snder and receiver is A, B, or C and val is an integer value
+    def update_ledger(self, transaction, isLeaf):
+        if isLeaf:
+            #update ledger and accounts
+            try:
+                sndr, rcvr, amount = transaction.split('-', 2)
+                amount = int(amount)
+                self.ledger.append(transaction)
+                self.transactions.append(transaction)
+                self.accounts[sndr] -= amount
+                self.accounts[rcvr] += amount
+                print("------update_ledger: new ledger: ", self.ledger)
+                return (sndr + ":$" + str(self.accounts[sndr]) + '--' + rcvr + ":$" + str(self.accounts[rcvr]))     
+            except Exception:
+                print('Invalid proposal format: ', msg)
+                import traceback
+                traceback.print_exc()    
+        else:
+            #update ledger only
+            l = transaction.strip('][').replace('\'', '').split(", ")
+            # if not " " in proposal_value:
+            #         self.ledger.append(self.proposal_value.pop())
+            self.ledger.extend(l)
+            print("------update_ledger: new ledger: ", self.ledger)
+        
 
 
         

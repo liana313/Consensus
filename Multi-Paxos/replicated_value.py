@@ -15,6 +15,8 @@ import os
 import json
 import random
 import os.path
+import time
+import config
 
 from twisted.internet import reactor, defer, task
 
@@ -29,6 +31,10 @@ class BaseReplicatedValue (object):
         self.peers       = peers            # list of peer network uids
         self.quorum_size = len(peers)/2 + 1
         self.state_file  = state_file
+        self.lastTime = 0 # last time node sent an update to lead proposer 
+        self.sendRate = 10000 # num millisecs between updates sent to layer above
+        self.height = 4 - len(self.network_uid)
+        self.temp_updates = [] #list of string proposals
 
 
 
@@ -37,6 +43,41 @@ class BaseReplicatedValue (object):
         self.paxos = PaxosInstance(self.network_uid, self.quorum_size,
                                    self.promised_id, self.accepted_id,
                                    self.accepted_value)
+
+
+    def send_updates(self, timeMillisecs, proposal_value):
+        #TODO remove config so you don't need to import it here
+        #append to temp list of updates waiting
+        #case on whether this is a single proposal or ledger
+        if " " in proposal_value:
+            print("---------------------_REACHED")
+            transactions = proposal_value.strip('][').replace('\'', '').split(', ') # returns list of string proposals
+            print("-----send_updates: ", transactions)
+            self.temp_updates.extend(transactions)
+        else:
+            transactions = proposal_value.strip('][').split(', ')
+            print("-----send_updates: ", transactions)
+            print("-----type:", type(transactions))
+            print("-----temp:", self.temp_updates)
+            self.temp_updates.append(proposal_value)
+
+        if self.network_uid in config.leader.keys():
+            if (timeMillisecs - self.lastTime > self.sendRate):
+                print("temp_updates: ", self.temp_updates)
+                if not " " in str(self.temp_updates):
+                    self.messenger.send_update(self.temp_updates.pop())
+                else:
+                    self.messenger.send_update(self.temp_updates)
+                self.temp_updates = []
+                self.lastTime = timeMillisecs
+            # else:
+            #     #append to temp list of updates waiting
+            #     #case on whether this is a single proposal or ledger
+            #     if proposal_value.contains(" "):
+            #         transactions = proposal_value.strip('][').split(', ') # returns list of string proposals
+            #         self.temp_updates.append(transactions)
+            #     else:
+            #         self.temp_updates.append(proposal_value)
 
 
     def get_network_uid(self):
@@ -103,8 +144,8 @@ class BaseReplicatedValue (object):
         #     self.promised_id     = to_pid(m['promised_id'])
         #     self.accepted_id     = to_pid(m['accepted_id'])
         #     self.accepted_value  = m['accepted_value']
-
-
+        
+    
     def propose_update(self, new_value):
         """
         This is a key method that some of the mixin classes override in order
@@ -139,7 +180,6 @@ class BaseReplicatedValue (object):
     def send_accepted(self, proposal_id, proposal_value):
         for uid in self.peers:
             self.messenger.send_accepted(uid, self.instance_number, proposal_id, proposal_value)
-
 
     def receive_prepare(self, from_uid, instance_number, proposal_id):
         # Only process messages for the current link in the multi-paxos chain
@@ -200,6 +240,14 @@ class BaseReplicatedValue (object):
         
         if isinstance(m, Resolution):
             print("----Resolution!!!")
-            self.messenger.send_reply(self.accepted_value)
+            if self.height == 0:
+                result = self.paxos.update_ledger(proposal_value, True)
+            else:
+                result = self.paxos.update_ledger(proposal_value, False)
+            timeMillisecs = int(round(time.time() * 1000))
+            self.send_updates(timeMillisecs, proposal_value) #send update if last update was more than 10millisec ago
+            if self.height == 0:
+                self.messenger.send_reply(result)
+            #self.messenger.send_reply(self.accepted_value)
             self.advance_instance( self.instance_number + 1, proposal_value )
     

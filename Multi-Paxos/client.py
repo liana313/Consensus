@@ -15,7 +15,7 @@ class ClientProtocol(protocol.DatagramProtocol):
 
     def __init__(self, uid, new_value):
     	# TODO: fix later - A is hardcoded as leader proposer - all clients will write to server A's ip, port
-        self.addr      = config.peers['A']
+        self.addr      = config.server[sys.argv[1]]
         self.new_value = new_value
 
     def startProtocol(self):
@@ -38,13 +38,13 @@ class ClientProtocol(protocol.DatagramProtocol):
             traceback.print_exc()
 
 
-if len(sys.argv) != 3 or not  sys.argv[1] in config.peers:
-    print('python client.py <A|B|C> <new_value>')
+if len(sys.argv) != 3 or not sys.argv[1] in config.server:
+    print('python client.py <id of lead proposer: 1000, 2000, 3000 or 4000> <sndr id>-,rcvr id>-<amount>')
     sys.exit(1)
 
     
 def main():
-    reactor.listenUDP(config.client[1],ClientProtocol(sys.argv[1], sys.argv[2]))
+    reactor.listenUDP(config.client[sys.argv[1]][1],ClientProtocol(sys.argv[1], sys.argv[2]))
 
     
 reactor.callWhenRunning(main)

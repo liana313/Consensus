@@ -107,7 +107,14 @@ class Messenger(protocol.DatagramProtocol):
         msg = '{0} {1} {2}'.format('reply', new_val, self.replicated_val.get_network_uid())
         print('snd client:', msg)
         text = bytes(msg, 'utf-8')
-        self.transport.write(text, config.client)
+        indx = str(int(self.replicated_val.get_network_uid()[0]) * 1000)
+        self.transport.write(text, config.client[indx])
+
+    def send_update(self, proposal_value):
+        print('SEND UPDATE ABOVE',': ', proposal_value)
+        text = bytes('propose {0}'.format(proposal_value), 'utf-8')
+        #text = bytes('propose ' + proposal_value, 'utf-8')
+        self.transport.write(text, config.leader[self.replicated_val.get_network_uid()])
 
     # TODO: add send_reply - when accepted is received by learner, send value to client, client will continually check for messages and ignore those with same seq/proposal num
 
