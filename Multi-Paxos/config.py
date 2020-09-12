@@ -5,6 +5,50 @@
 #               C=('127.0.0.1',10236),
 #             )
 
+#algorithm type - optimistic or coordinator
+algorithm = 'optimistic'
+#algorithm = 'coordinator'
+
+#cluster<height><cluster number> - set of uid's in cluster
+cluster01 = ["1000", "1001", "1002"]
+cluster02 = ["2000", "2001", "2002"]
+cluster03 = ["3000", "3001", "3002"]
+cluster04 = ["4000", "4001", "4002"]
+cluster11 = ["100", "101", "102"]
+cluster12 = ["200", "201", "202"]
+cluster13 = ["300", "301", "302"]
+cluster14 = ["400", "401", "402"]
+cluster21 = ["10", "11", "12"]
+cluster22 = ["20", "21", "22"]
+cluster31 = ["1", "2", "3"]
+
+
+#dictionary mapping from node to a list of its leaf level descendants
+descendants = dict()
+descendants['1'] = descendants['2'] = descendants['3'] = cluster01 + cluster02 + cluster03 + cluster04
+descendants['10'] = descendants['11'] = descendants['12'] = cluster01 + cluster02
+descendants['20'] = descendants['21'] = descendants['22'] = cluster03 + cluster04
+descendants['100'] = descendants['101'] = descendants['102'] = cluster01
+descendants['200'] = descendants['201'] = descendants['202'] = cluster02
+descendants['300'] = descendants['301'] = descendants['302'] = cluster03
+descendants['400'] = descendants['401'] = descendants['402'] = cluster04
+
+
+
+lca = dict() #sndr's cluster at h=0 -> rcvr's cluster at h=0 -> (addr of lca, id of lca)
+lca[(1,2)] = (('127.0.0.1',10258), '10')
+lca[(1,3)] = (('127.0.0.1',10264), '1')
+lca[(1,4)] = (('127.0.0.1',10264), '1')
+lca[(2,1)] = (('127.0.0.1',10258), '10')
+lca[(2,3)] = (('127.0.0.1',10264), '1')
+lca[(2,4)] = (('127.0.0.1',10264), '1')
+lca[(3,1)] = (('127.0.0.1',10264), '1')
+lca[(3,2)] = (('127.0.0.1',10264), '1')
+lca[(3,4)] = (('127.0.0.1',10261), '20')
+lca[(4,1)] = (('127.0.0.1',10264), '1')
+lca[(4,2)] = (('127.0.0.1',10264), '1')
+lca[(4,3)] = (('127.0.0.1',10261), '20')
+
 
 peers = dict() # height -> cluster -> id -> (ip, port)
 peers = {0: {1: {'1000': -1}, 2: {'2000': -1}, 3: {'3000': -1}, 4: {'4000': -1}}, 1: {1: {'100': -1}, 2: {'200': -1}, 3: {'300': -1}, 4: {'400': -1}}, 2: {1: {'10': -1}, 2: {'20': -1}}, 3: {1: {'1': -1}}}

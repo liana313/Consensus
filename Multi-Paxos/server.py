@@ -3,7 +3,8 @@ import os.path
 import argparse
 import json
 
-from twisted.internet import reactor
+from twisted.internet import reactor, defer, task
+import time
 
 this_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.append( os.path.dirname(this_dir) )
@@ -15,6 +16,21 @@ from messenger           import Messenger
 from sync_strategy       import SimpleSynchronizationStrategyMixin
 from resolution_strategy import ExponentialBackoffResolutionStrategyMixin
 #from master_strategy     import DedicatedMasterStrategyMixin
+
+def cbLoopDone(result):
+    """
+    Called when loop was stopped with success.
+    """
+    print("Loop done.")
+    reactor.stop()
+
+
+def ebLoopFailed(failure):
+    """
+    Called when loop execution failed.
+    """
+    print(failure.getBriefTraceback())
+    reactor.stop()
 
 
 p = argparse.ArgumentParser(description='Multi-Paxos replicated value server')
@@ -46,7 +62,7 @@ height = 4 - len(args.uid)
 print("height: ", height)
 cluster = 0
 if int(args.uid) == 1 or int(args.uid) == 2 or int(args.uid) == 3:
-	cluster = 3
+	cluster = 1
 else:
 	cluster = int(args.uid[0])
 
@@ -58,5 +74,17 @@ r = ReplicatedValue(args.uid, config.peers[height][cluster].keys(), state_file)
 #m = Messenger(args.uid, config.peers, r)
 m = Messenger(args.uid, config.peers[height][cluster], r)
 
+# loop = task.LoopingCall(r.handle_time(int(round(time.time() * 1000))))
+
+# loopDeferred = loop.start(1.0, now=True)
+
+# # Add callbacks for stop and failure.
+# loopDeferred.addCallback(cbLoopDone)
+# loopDeferred.addErrback(ebLoopFailed)
+
+
 reactor.run()
+
+
+
 

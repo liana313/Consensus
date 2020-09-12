@@ -32,9 +32,15 @@ class BaseReplicatedValue (object):
         self.quorum_size = len(peers)/2 + 1
         self.state_file  = state_file
         self.lastTime = 0 # last time node sent an update to lead proposer 
-        self.sendRate = 10000 # num millisecs between updates sent to layer above
-        self.height = 4 - len(self.network_uid)
-        self.temp_updates = [] #list of string proposals
+        self.sendRate = 10 # num millisecs between updates sent to layer above
+        self.height = self.get_height(self.network_uid)
+        self.temp_updates = [] #list of string proposals waiting to be sent to level above in hieararchy
+
+        #coordinator based data structures
+        self.pending_inter_ledger = dict() # self seq_num -> transaction - may not need to use (revise new_inter_ledger fct)
+        self.uncommitted_nodes = [] #list of string ids of nodes that have pending inter-ledger transactions (coordinator based)
+        self.inter_ledger_seq = dict() #transaction -> seq (a list of seq num, sndr uid) --- stored in lca of coordinator based alg to track if 2 seq nums have been received for a transaction
+        self.inter_ledger_transaction = dict() #seq #-> tranasaction - used by lca so that after consensus on seq # it can recover transaction and send back to clusters
 
 
 
@@ -45,31 +51,50 @@ class BaseReplicatedValue (object):
                                    self.accepted_value)
 
 
-    def send_updates(self, timeMillisecs, proposal_value):
+    #coordinator based alg (and also the other inter ledger alg) - call wwhen a new inter ledger transaction becomes initiated and pending
+    def new_inter_ledger(self, transaction):
+        self.pending_inter_ledger[transaction] = True
+        sndr, rcvr, amount = transaction.split('-', 2)
+        self.uncommitted_nodes.append(sndr)
+
+    def double_spending(self, network_uid):
+        if network_uid in self.uncommitted_nodes:
+            return True
+        else:
+            return False
+
+
+    def send_updates(self, proposal_value):
         #TODO remove config so you don't need to import it here
         #append to temp list of updates waiting
         #case on whether this is a single proposal or ledger
+        timeMillisecs = int(round(time.time() * 1000))
         if " " in proposal_value:
-            print("---------------------_REACHED")
+            #print("---------------------_REACHED")
             transactions = proposal_value.strip('][').replace('\'', '').split(', ') # returns list of string proposals
-            print("-----send_updates: ", transactions)
+            #print("-----send_updates: ", transactions)
             self.temp_updates.extend(transactions)
         else:
             transactions = proposal_value.strip('][').split(', ')
-            print("-----send_updates: ", transactions)
-            print("-----type:", type(transactions))
-            print("-----temp:", self.temp_updates)
+            #print("-----send_updates: ", transactions)
+            #print("-----type:", type(transactions))
+            #print("-----temp:", self.temp_updates)
             self.temp_updates.append(proposal_value)
+        self.handle_time(timeMillisecs)
+
+    def handle_time(self, timeMillisecs) :
 
         if self.network_uid in config.leader.keys():
+            #print("handle time called!!")
             if (timeMillisecs - self.lastTime > self.sendRate):
-                print("temp_updates: ", self.temp_updates)
-                if not " " in str(self.temp_updates):
-                    self.messenger.send_update(self.temp_updates.pop())
-                else:
-                    self.messenger.send_update(self.temp_updates)
-                self.temp_updates = []
-                self.lastTime = timeMillisecs
+                #print("temp_updates: ", self.temp_updates)
+                if len(self.temp_updates) > 0: 
+                    if not " " in str(self.temp_updates):
+                        self.messenger.send_update(self.temp_updates.pop())
+                    else:
+                        self.messenger.send_update(self.temp_updates)
+                    self.temp_updates = []
+                    self.lastTime = timeMillisecs
             # else:
             #     #append to temp list of updates waiting
             #     #case on whether this is a single proposal or ledger
@@ -82,6 +107,24 @@ class BaseReplicatedValue (object):
 
     def get_network_uid(self):
         return self.network_uid
+
+    #get cluster of node with network_uid (string)
+    def get_cluster(self, network_uid):
+        cluster = 0
+        if int(network_uid) == 1 or int(network_uid) == 2 or int(network_uid) == 3:
+            cluster = 1
+        else:
+            cluster = int(network_uid[0])
+        return cluster
+
+    def get_height(self, network_uid):
+        return (4 - len(network_uid))
+
+    def same_ledger(self, network_uid_a, network_uid_b):
+        if self.get_cluster(network_uid_a) == self.get_cluster(network_uid_b) and self.get_height(network_uid_a) == self.get_height(network_uid_b):
+            return True
+        else: 
+            return False
     
     def set_messenger(self, messenger):
         self.messenger = messenger
@@ -244,10 +287,170 @@ class BaseReplicatedValue (object):
                 result = self.paxos.update_ledger(proposal_value, True)
             else:
                 result = self.paxos.update_ledger(proposal_value, False)
-            timeMillisecs = int(round(time.time() * 1000))
-            self.send_updates(timeMillisecs, proposal_value) #send update if last update was more than 10millisec ago
+            
+            self.send_updates(proposal_value) #send update if last update was more than 10millisec ago
             if self.height == 0:
                 self.messenger.send_reply(result)
             #self.messenger.send_reply(self.accepted_value)
             self.advance_instance( self.instance_number + 1, proposal_value )
+
+    #Coordinator based algorithm
+    def receive_propose_to_lca(self, proposal):
+        sndr, rcvr, amount = proposal.split('-', 2)
+        if not self.get_height(sndr) == 0 or not self.get_height(rcvr) == 0:
+            print("------error in receive_propose_to_lca: inter-ledger transaction not at leaf level") 
+        sndr_cluster = self.get_cluster(sndr)
+        rcvr_cluster = self.get_cluster(rcvr)
+        sndr_leader_addr = config.peers[0][sndr_cluster][str(sndr_cluster*1000)]
+        rcvr_leader_addr = config.peers[0][rcvr_cluster][str(rcvr_cluster*1000)]
+        self.send_seq_req(sndr_leader_addr, proposal)
+        self.send_seq_req(rcvr_leader_addr, proposal)
+
+    def send_seq_req(self, to_addr, proposal):
+        self.messenger.send_seq_req(to_addr, proposal)
+
+
+    def receive_seq_req(self, lca_id, proposal):
+        print("----received seq request")
+        # get next seq num
+        seq_num = self.paxos.next_seq_num()
+        # TODO store seq num and transaction mapping ?
+        #send seq num back to lca
+        to_addr = config.peers[self.get_height(lca_id)][self.get_cluster(lca_id)][lca_id]
+        self.messenger.send_seq(to_addr, seq_num, proposal)
+
+    def receive_seq(self, seq_num, proposal):
+        print("-----received seq num")
+        #remember seq_nums are lists right now of form [seq num, sndr's uid]
+        if proposal in self.inter_ledger_seq.keys():
+            seq_1 = self.inter_ledger_seq[proposal][0]
+            #remove proposal now that we have two seq_nums
+            del self.inter_ledger_seq[proposal]
+            seq_2 = seq_num[0]
+            new_seq = '{0}-{1}'.format(seq_1, seq_2)
+
+            print("new seq: ", new_seq)
+            self.inter_ledger_transaction[new_seq] = proposal
+            self.propose_update_c(new_seq)
+        else:
+            self.inter_ledger_seq[proposal] = seq_num
+
+
+    #Coordinator based algorithm - consensus functions for lca's cluster
+    def propose_update_c(self, new_value):
+        # check whether leader is steady and prev sent prepare
+        if self.paxos.proposed_value is None:
+            self.paxos.propose_value( new_value, False )
+        if (self.instance_number > 0):
+            print("skipping prepare")
+            self.paxos.propose_value( new_value, True)
+            m = self.paxos.accept() # skip sending prepare and waiting for promise
+            self.send_accept_c(m.proposal_id, m.proposal_value)
+        else:
+            m = self.paxos.prepare() # Advances to the next proposal number
+            self.send_prepare_c(m.proposal_id) 
+
+    def send_prepare_c(self, proposal_id):
+        for uid in self.peers:
+            self.messenger.send_prepare_c(uid, self.instance_number, proposal_id)
+
+    def receive_prepare_c(self, from_uid, instance_number, proposal_id):
+        # Only process messages for the current link in the multi-paxos chain
+        if instance_number != self.instance_number:
+            return
+        
+        m = self.paxos.receive_prepare( Prepare(from_uid, proposal_id) )
+        
+        if isinstance(m, Promise):
+            self.save_state(self.instance_number, self.current_value, m.proposal_id, m.last_accepted_id, m.last_accepted_value)
+            
+            self.messenger.send_promise_c(from_uid, self.instance_number,
+                                        m.proposal_id, m.last_accepted_id, m.last_accepted_value )
+        else:
+            self.messenger.send_nack(from_uid, self.instance_number, proposal_id, self.promised_id)
+
+    def receive_promise_c(self, from_uid, instance_number, proposal_id, last_accepted_id, last_accepted_value):
+        # Only process messages for the current link in the multi-paxos chain
+        if instance_number != self.instance_number:
+            return
+
+        m = self.paxos.receive_promise( Promise(from_uid, self.network_uid, proposal_id,
+                                                last_accepted_id, last_accepted_value) )
+        
+        if isinstance(m, Accept):
+            self.send_accept_c(m.proposal_id, m.proposal_value)
+
+    def send_accept_c(self, proposal_id, proposal_value):
+        for uid in self.peers:
+            self.messenger.send_accept_c(uid, self.instance_number, proposal_id, proposal_value)
+
+    def receive_accept_c(self, from_uid, instance_number, proposal_id, proposal_value):
+        # Only process messages for the current link in the multi-paxos chain
+        if instance_number != self.instance_number:
+            return
+
+        m = self.paxos.receive_accept( Accept(from_uid, proposal_id, proposal_value) )
+        
+        if isinstance(m, Accepted):
+            self.save_state(self.instance_number, self.current_value, self.promised_id, proposal_id, proposal_value)
+            self.send_accepted_c(m.proposal_id, m.proposal_value)
+        else:
+            self.messenger.send_nack(from_uid, self.instance_number, proposal_id, self.promised_id)
+
+    def send_accepted_c(self, proposal_id, proposal_value):
+        for uid in self.peers:
+            self.messenger.send_accepted_c(uid, self.instance_number, proposal_id, proposal_value)
+
+    def leaf_cluster_addrs(self, cluster):
+        yield config.peers[0][cluster][str(cluster*1000)]
+        yield config.peers[0][cluster][str(cluster*1000 + 1)]
+        yield config.peers[0][cluster][str(cluster*1000 + 2)]
+
+    def receive_accepted_c(self, from_uid, instance_number, proposal_id, proposal_value):
+        # Only process messages for the current link in the multi-paxos chain
+        if instance_number != self.instance_number:
+            return
+
+        m = self.paxos.receive_accepted( Accepted(from_uid, proposal_id, proposal_value) )
+        
+        if isinstance(m, Resolution):
+            print("----Resolution!!!")
+            #get transaction from dict based on seq num (proposal_value) and then remove from dict
+            if proposal_value in self.inter_ledger_transaction:
+                # in lead proposer of cluster
+                transaction = self.inter_ledger_transaction[proposal_value]  
+                del self.inter_ledger_transaction[proposal_value]
+                #determine involved clusters, and their lead proposers
+                sndr, rcvr, amount = transaction.split('-', 2)
+                sndr_cluster = self.get_cluster(sndr)
+                rcvr_cluster = self.get_cluster(rcvr)
+                for addr in self.leaf_cluster_addrs(sndr_cluster):
+                    self.messenger.send_commit_c(addr, proposal_value, transaction)
+                for addr in self.leaf_cluster_addrs(rcvr_cluster):
+                    self.messenger.send_commit_c(addr, proposal_value, transaction)
+            #advance instance
+            self.advance_instance( self.instance_number + 1, proposal_value )
+    
+    
+
+    def receive_commit_c(self, seq_num, transaction):
+        print("received commti")
+        #update data structures so that sndr can now transact again
+        if transaction in self.pending_inter_ledger.keys():
+            del self.pending_inter_ledger[transaction]
+        sndr, rcvr, amount = transaction.split('-', 2)
+        if sndr in self.uncommitted_nodes:
+            self.uncommitted_nodes.remove(sndr)
+        #update ledger
+        result = self.paxos.update_ledger(transaction, True)
+        print(result)
+        self.send_updates(transaction)
+
+
+
+
+            
+
+
+    
     

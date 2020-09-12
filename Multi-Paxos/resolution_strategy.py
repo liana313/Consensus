@@ -71,7 +71,20 @@ class ExponentialBackoffResolutionStrategyMixin (object):
         self.new_value = new_value # essentially parap for drive_to_resolution but used as a var here
         self.drive_to_resolution()
 
+    # #coordinator based algorithm
+    # def propose_update_c:
+    #     # check whether leader is steady and prev sent prepare
+    #     if (self.instance_number > 0):
+    #         print("skipping prepare")
+    #         self.paxos.propose_value( self.new_value, True)
+    #         m = self.paxos.accept() # skip sending prepare and waiting for promise
+    #         self.send_accept_c(m.proposal_id, m.proposal_value)
+    #     else:
+    #         m = self.paxos.prepare() # Advances to the next proposal number
+    #         self.send_prepare_c(m.proposal_id) 
 
+
+    #normal operation
     def send_accept(self, proposal_id, proposal_value):
         if self.retransmit_task is not None:
             self.retransmit_task.stop()

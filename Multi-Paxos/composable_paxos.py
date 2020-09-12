@@ -4,6 +4,7 @@ a set of composable classes.
 '''
 
 import collections
+import config
 
 # ProposalID
 #
@@ -158,7 +159,7 @@ class Proposer (MessageHandler):
                 self.proposed_value = value
             
                 if self.leader:
-                    print("-------hit in propose_value -composable_paxos")
+                    #print("-------hit in propose_value -composable_paxos")
                     self.current_accept_msg = Accept(self.network_uid, self.proposal_id, value)
                     return self.current_accept_msg
 
@@ -177,10 +178,18 @@ class Proposer (MessageHandler):
         self.proposal_id         = ProposalID(self.highest_proposal_id.number + 1, self.network_uid)
         self.highest_proposal_id = self.proposal_id
         self.current_prepare_msg = Prepare(self.network_uid, self.proposal_id)
-
+        #print("proposed value: ", self.proposed_value)
         return self.current_prepare_msg
 
-    
+    #Coordinator based algorithm
+    #method to manually increment seqence number and return for Coordinator based alg
+    def next_seq_num(self):
+        self.proposal_id  = ProposalID(self.highest_proposal_id.number + 1, self.network_uid)
+        self.highest_proposal_id = self.proposal_id
+        return self.proposal_id
+
+
+    #normal operation
     def observe_proposal(self, proposal_id):
         '''
         Optional method used to update the proposal counter as proposals are
@@ -219,17 +228,19 @@ class Proposer (MessageHandler):
 
             self.promises_received.add( msg.from_uid )
 
-            #print("-----promise received, total ")
-            #print("-----")
-            #print(len(self.promises_received))
-            #print("-----promises")
+            # print("-----promise received, total ")
+            # print("-----")
+            # print(len(self.promises_received))
+            # print("-----promises")
 
             if self.highest_accepted_id == None or msg.last_accepted_id > self.highest_accepted_id:
                 self.highest_accepted_id = msg.last_accepted_id
                 if msg.last_accepted_value is not None:
                     self.proposed_value = msg.last_accepted_value
 
+            #print("proposed value: ", self.proposed_value)
             if len(self.promises_received) >= self.quorum_size:
+                #print("---------hit")
                 self.leader = True
 
                 return self.accept()
@@ -242,6 +253,7 @@ class Proposer (MessageHandler):
     def accept(self):
         if self.proposed_value is not None:
             self.current_accept_msg = Accept(self.network_uid, self.proposal_id, self.proposed_value)
+            #print("---------hit")
             return self.current_accept_msg
 
                 
@@ -320,6 +332,7 @@ class Learner (MessageHandler):
         self.final_acceptors   = None   # Will be a set of acceptor UIDs once the final value is chosen
         self.final_proposal_id = None
         self.ledger = []
+        self.pending_inter_ledger = [] #temporarily stores a cross-ledger transaction so that parent can wait to receive both commtis before committing transaction to its ledger
         self.accounts = dict()
         # TODO: instead of hardcoding, loop over peers by importing config
         self.accounts['1000'] = 1000
@@ -384,6 +397,24 @@ class Learner (MessageHandler):
             return Resolution( self.network_uid, self.final_value )
             # call update ledger
 
+    #get cluster of node with network_uid (string)
+    def get_cluster(self, network_uid):
+        cluster = 0
+        if int(network_uid) == 1 or int(network_uid) == 2 or int(network_uid) == 3:
+            cluster = 1
+        else:
+            cluster = int(network_uid[0])
+        return cluster
+
+    def get_height(self, network_uid):
+        return (4 - len(network_uid))
+
+    def same_ledger(self, network_uid_a, network_uid_b):
+        if self.get_cluster(network_uid_a) == self.get_cluster(network_uid_b) and self.get_height(network_uid_a) == self.get_height(network_uid_b):
+            return True
+        else: 
+            return False
+
     # transaction must be in form "snder-receiver-val", where snder and receiver is A, B, or C and val is an integer value
     def update_ledger(self, transaction, isLeaf):
         if isLeaf:
@@ -404,9 +435,26 @@ class Learner (MessageHandler):
         else:
             #update ledger only
             l = transaction.strip('][').replace('\'', '').split(", ")
-            # if not " " in proposal_value:
-            #         self.ledger.append(self.proposal_value.pop())
-            self.ledger.extend(l)
+            #TODO: for each transaction in l, check some things then update or put to temp lsit
+            for x in l:
+                sndr, rcvr, amount = x.split('-', 2)
+                if (self.same_ledger(sndr, rcvr)):
+                    #intra cluster transaction
+                    self.ledger.append(x)
+                else:
+                    #cross cluster transaction
+                    if sndr in config.descendants[self.network_uid] and rcvr in config.descendants[self.network_uid]:
+                        # need to wait for both transactions before appending to ledger
+                        if x in self.pending_inter_ledger:
+                            self.pending_inter_ledger.remove(x)
+                            self.ledger.append(x)
+                        else:
+                            self.pending_inter_ledger.append(x)
+                    else:
+                        #print("------------ Update ledger: REACHED")
+                        self.ledger.append(x)
+
+
             print("------update_ledger: new ledger: ", self.ledger)
         
 

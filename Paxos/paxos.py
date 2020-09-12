@@ -1,20 +1,6 @@
 import collections
 
-# ProposalID
-#
-# In order for the Paxos algorithm to function, all proposal ids must be
-# unique. A simple way to ensure this is to include the proposer's unique
-# id in the proposal id. 
-#
-# Python tuples allow the proposal number and the UID to be combined in a
-# manner that supports comparison in the expected manner:
-#
-#   (4,'C') > (4,'B') > (3,'Z')
-#
-# Named tuples from the collections module support all of the regular
-# tuple operations but additionally allow access to the contents by
-# name so the numeric component of the proposal ID may be referred to
-# via 'proposal_id.number' instead of 'proposal_id[0]'.
+
 #
 ProposalID = collections.namedtuple('ProposalID', ['number', 'uid'])
 
