@@ -124,6 +124,25 @@ class Replica(MessageHandler):
         self.last_exec_i = 0
         self.current_value = None
 
+        #ledger data structures
+        self.ledger = []
+        self.pending_inter_ledger = [] #temporarily stores a cross-ledger transaction so that parent can wait to receive both commtis before committing transaction to its ledger
+        self.accounts = dict()
+        # TODO: instead of hardcoding, loop over peers by importing config
+        self.accounts['1000'] = 1000
+        self.accounts['1001'] = 1000
+        self.accounts['1002'] = 1000
+        self.accounts['2000'] = 1000
+        self.accounts['2001'] = 1000
+        self.accounts['2002'] = 1000
+        self.accounts['3000'] = 1000
+        self.accounts['3001'] = 1000
+        self.accounts['3002'] = 1000
+        self.accounts['4000'] = 1000
+        self.accounts['4001'] = 1000
+        self.accounts['4002'] = 1000
+        self.transactions = []
+
         # Initialize checkpoints
         initial_checkpoint = self.to_checkpoint(self.vali, self.last_rep_i, self.last_rep_ti)
 
@@ -141,6 +160,10 @@ class Replica(MessageHandler):
         # Testing 
         self.stable_n()
         self.stat = Counter()
+
+    def next_seq_num(self):
+        self.seqno_i = self.seqno_i + 1
+        return self.seqno_i
 
     def to_checkpoint(self, vi, rep, rep_t):
         rep_ser = tuple(sorted(rep.items()))
@@ -286,9 +309,14 @@ class Replica(MessageHandler):
             #print("----already replied to message)")
             return False
         else:
+            #print("----receive_request else entered")
             self.in_i.add( msg )
+            #print("----primary: ", self.primary())
+            ##print("---i: ", self.i)
+            print(self.primary() == self.i)
             # If not the primary, send message to all.
             if self.primary() != self.i:
+                #print("----receive_request not primary")
                 self.out_i.add( msg )
 
             ## Liveness hack. TODO: check it.
@@ -490,6 +518,67 @@ class Replica(MessageHandler):
         #     return True
         else:
             return None
+
+    #get cluster of node with network_uid (string)
+    def get_cluster(self, network_uid):
+        cluster = 0
+        if int(network_uid) == 1 or int(network_uid) == 2 or int(network_uid) == 3:
+            cluster = 1
+        else:
+            cluster = int(network_uid[0])
+        return cluster
+
+    def get_height(self, network_uid):
+        return (4 - len(network_uid))
+
+    def same_ledger(self, network_uid_a, network_uid_b):
+        if self.get_cluster(network_uid_a) == self.get_cluster(network_uid_b) and self.get_height(network_uid_a) == self.get_height(network_uid_b):
+            return True
+        else: 
+            return False
+
+    # transaction must be in form "snder-receiver-val", where snder and receiver is A, B, or C and val is an integer value
+    def update_ledger(self, transaction, isLeaf):
+        if isLeaf:
+            #update ledger and accounts
+            try:
+                sndr, rcvr, amount = transaction.split('-', 2)
+                amount = int(amount)
+                self.ledger.append(transaction)
+                self.transactions.append(transaction)
+                self.accounts[sndr] -= amount
+                self.accounts[rcvr] += amount
+                print("------update_ledger: new ledger: ", self.ledger)
+                return (sndr + ":$" + str(self.accounts[sndr]) + '--' + rcvr + ":$" + str(self.accounts[rcvr]))     
+            except Exception:
+                print('Invalid proposal format: ', msg)
+                import traceback
+                traceback.print_exc()    
+        else:
+            #update ledger only
+            l = transaction.strip('][').replace('\'', '').split(", ")
+            #TODO: for each transaction in l, check some things then update or put to temp lsit
+            for x in l:
+                sndr, rcvr, amount = x.split('-', 2)
+                if (self.same_ledger(sndr, rcvr)):
+                    #intra cluster transaction
+                    self.ledger.append(x)
+                else:
+                    #cross cluster transaction
+                    if sndr in config.descendants[self.network_uid] and rcvr in config.descendants[self.network_uid]:
+                        # need to wait for both transactions before appending to ledger
+                        if x in self.pending_inter_ledger:
+                            self.pending_inter_ledger.remove(x)
+                            self.ledger.append(x)
+                        else:
+                            self.pending_inter_ledger.append(x)
+                    else:
+                        #print("------------ Update ledger: REACHED")
+                        self.ledger.append(x)
+
+
+            print("------update_ledger: new ledger: ", self.ledger)
+        
 
 
     def compute_P(self, v, M=None):

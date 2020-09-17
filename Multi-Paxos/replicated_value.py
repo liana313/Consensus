@@ -299,6 +299,7 @@ class BaseReplicatedValue (object):
         sndr, rcvr, amount = proposal.split('-', 2)
         if not self.get_height(sndr) == 0 or not self.get_height(rcvr) == 0:
             print("------error in receive_propose_to_lca: inter-ledger transaction not at leaf level") 
+            return
         sndr_cluster = self.get_cluster(sndr)
         rcvr_cluster = self.get_cluster(rcvr)
         sndr_leader_addr = config.peers[0][sndr_cluster][str(sndr_cluster*1000)]
@@ -425,16 +426,16 @@ class BaseReplicatedValue (object):
                 sndr_cluster = self.get_cluster(sndr)
                 rcvr_cluster = self.get_cluster(rcvr)
                 for addr in self.leaf_cluster_addrs(sndr_cluster):
-                    self.messenger.send_commit_c(addr, proposal_value, transaction)
+                    self.messenger.send_lcacommit_c(addr, proposal_value, transaction)
                 for addr in self.leaf_cluster_addrs(rcvr_cluster):
-                    self.messenger.send_commit_c(addr, proposal_value, transaction)
+                    self.messenger.send_lcacommit_c(addr, proposal_value, transaction)
             #advance instance
             self.advance_instance( self.instance_number + 1, proposal_value )
     
     
 
-    def receive_commit_c(self, seq_num, transaction):
-        print("received commti")
+    def receive_lcacommit_c(self, seq_num, transaction):
+        print("received lcacommit")
         #update data structures so that sndr can now transact again
         if transaction in self.pending_inter_ledger.keys():
             del self.pending_inter_ledger[transaction]

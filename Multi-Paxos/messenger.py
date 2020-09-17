@@ -67,7 +67,7 @@ class Messenger(protocol.DatagramProtocol):
             elif message_type == 'propose_to_rcvr':
                 self.replicated_val.propose_update( data )
             # coordinator based alg
-            elif message_type == 'propose_to_lca' or message_type == 'seq_req' or message_type == 'seq' or message_type == 'commit_c':
+            elif message_type == 'propose_to_lca' or message_type == 'seq_req' or message_type == 'seq' or message_type == 'lcacommit_c':
                 print("rcv: ", packet)
                 handler = getattr(self.replicated_val, 'receive_' + message_type, None)
                 kwargs = json.loads(data)
@@ -158,8 +158,8 @@ class Messenger(protocol.DatagramProtocol):
                                          proposal_id     = proposal_id,
                                          proposal_value  = proposal_value)
 
-    def send_commit_c(self, addr, seq_num, transaction):
-        self._send_c(addr, "commit_c", seq_num = seq_num, transaction = transaction)
+    def send_lcacommit_c(self, addr, seq_num, transaction):
+        self._send_c(addr, "lcacommit_c", seq_num = seq_num, transaction = transaction)
 
 
     #normal Paxos operation
