@@ -29,7 +29,7 @@ class ClientProtocol(protocol.DatagramProtocol):
 
         for i in range(self.req_count):
             sender_id, receiver_id = self.getRandomPeers()
-            message = 'propose {0}-{1}-{2}'.format(sender_id, receiver_id, random.randint(1,1000))
+            message = 'propose {0}-{1}-{2}'.format(sender_id, receiver_id, random.randint(1,3))
             text = bytes(message, 'utf-8')
             self.transport.write(text, self.addr)
             time.sleep(message_interval)
