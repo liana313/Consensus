@@ -349,7 +349,9 @@ class Learner (MessageHandler):
         self.accounts['4002'] = 1000
         self.transactions = []
 
-        
+    def update_account(self, uid, new_val):
+        self.accounts[uid] = new_val    
+    
     def receive_accepted(self, msg):
         '''
         Called when an Accepted message is received from an acceptor. Once the final value

@@ -15,12 +15,13 @@ import config
 
 class ClientProtocol(protocol.DatagramProtocol):
 
-    def __init__(self, uid, req_count, p_cross_cluster):
+    def __init__(self, uid, req_count, p_cross_cluster, mobility_count):
     	# TODO: fix later - A is hardcoded as leader proposer - all clients will write to server A's ip, port
         self.addr      = config.server[sys.argv[1]]
         self.uid = uid
         self.req_count = int(req_count)
         self.p_cross_cluster = float(p_cross_cluster)
+        self.mobility_count = int(mobility_count) 
 
     def startProtocol(self):
         message_interval = 0.2 # 200 ms
@@ -44,9 +45,18 @@ class ClientProtocol(protocol.DatagramProtocol):
         print('local message: {0}, cross-cluster messages: {1}'.format(local_count, cross_count))
     	#reactor.stop()
 
+        for i in range(self.mobility_count):
+            sender_id, receiver_id = self.getRandomPeers()
+            new_cluster = random.randint(1, 4)
+            message = 'mobility_req {0}-{1}'.format(sender_id, new_cluster)
+            text = bytes(message, 'utf-8')
+            self.transport.write(text, self.addr)
+            time.sleep(message_interval)
+
+
     def getRandomPeers(self):
         cluster_count = len(config.peers[0])
-        per_cluster = len(config.peers[0][1])
+        per_cluster = len(config.peers[0][1]) - 1 ## need -1 because dictionary is initiatied with bogus values
 
         peer_1 = int(self.uid) + random.randint(1, per_cluster)
 
@@ -77,13 +87,13 @@ class ClientProtocol(protocol.DatagramProtocol):
             traceback.print_exc()
 
 
-if len(sys.argv) != 4 or not sys.argv[1] in config.server:
+if len(sys.argv) != 5 or not sys.argv[1] in config.server:
     print('python client.py <id of lead proposer: 1000, 2000, 3000 or 4000> <sndr id>-,rcvr id>-<amount>')
     sys.exit(1)
 
     
 def main():
-    reactor.listenUDP(config.client[sys.argv[1]][1],ClientProtocol(sys.argv[1], sys.argv[2], sys.argv[3]))
+    reactor.listenUDP(config.client[sys.argv[1]][1],ClientProtocol(sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]))
 
     
 reactor.callWhenRunning(main)

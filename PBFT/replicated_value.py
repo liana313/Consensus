@@ -440,4 +440,18 @@ class BaseReplicatedValue (object):
     #         print("----Resolution!!!")
     #         self.messenger.send_reply(self.accepted_value)
     #         self.advance_instance( self.instance_number + 1, proposal_value )
+
+    # mobility
+    def receive_mobility_req(self, node, new_cluster):
+        # if (self.same_ledger(self.uid, node)) {
+
+        # } else {
+
+        # }
+        for addr in self.leaf_cluster_addrs(new_cluster):
+            self.messenger.send_account(addr, node, self.pbft_instance.accounts[node])
+
+    def receive_account(self, node, account):
+        self.pbft_instance.update_account(node, account)
+        print("updated account")
     

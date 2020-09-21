@@ -448,6 +448,20 @@ class BaseReplicatedValue (object):
         self.send_updates(transaction)
 
 
+    # mobility
+    def receive_mobility_req(self, node, new_cluster):
+        # if (self.same_ledger(self.uid, node)) {
+
+        # } else {
+
+        # }
+        for addr in self.leaf_cluster_addrs(new_cluster):
+            self.messenger.send_account(addr, node, self.paxos.accounts[node])
+
+    def receive_account(self, node, account):
+        self.paxos.update_account(node, account)
+        print("updated account")
+
 
 
             

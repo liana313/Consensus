@@ -132,15 +132,19 @@ class Replica(MessageHandler):
         self.accounts['1000'] = 1000
         self.accounts['1001'] = 1000
         self.accounts['1002'] = 1000
+        self.accounts['1003'] = 1000
         self.accounts['2000'] = 1000
         self.accounts['2001'] = 1000
         self.accounts['2002'] = 1000
+        self.accounts['2003'] = 1000
         self.accounts['3000'] = 1000
         self.accounts['3001'] = 1000
         self.accounts['3002'] = 1000
+        self.accounts['3003'] = 1000
         self.accounts['4000'] = 1000
         self.accounts['4001'] = 1000
         self.accounts['4002'] = 1000
+        self.accounts['4003'] = 1000
         self.transactions = []
 
         # Initialize checkpoints
@@ -161,6 +165,9 @@ class Replica(MessageHandler):
         self.stable_n()
         self.stat = Counter()
 
+    def update_account(self, uid, new_val):
+        self.accounts[uid] = new_val    
+    
     def next_seq_num(self):
         self.seqno_i = self.seqno_i + 1
         return self.seqno_i

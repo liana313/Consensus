@@ -43,6 +43,14 @@ class Messenger(protocol.DatagramProtocol):
             if message_type == 'propose_update':
                 new_val, t, c = data.split(' ', 2)
                 self.replicated_val.propose_update( new_val, t, c)
+            elif message_type == 'mobility_req':
+                node, new_cluster = data.split('-', 1)
+                self.replicated_val.receive_mobility_req(node, int(new_cluster))
+            elif message_type == 'account':
+                print("rcv: ", packet)
+                handler = getattr(self.replicated_val, 'receive_' + message_type, None)
+                kwargs = json.loads(data)
+                handler(**kwargs)
             elif message_type == 'propose':
                 #print("propose message")
 
@@ -225,4 +233,8 @@ class Messenger(protocol.DatagramProtocol):
         self.transport.write(text, rcvr_leader_addr)
 
     # TODO: add send_reply - when accepted is received by learner, send value to client, client will continually check for messages and ignore those with same seq/proposal num
+
+    # edge mobility
+    def send_account(self, addr, node, account):
+        self._send_c(addr, 'account', node=node, account=account)
 
